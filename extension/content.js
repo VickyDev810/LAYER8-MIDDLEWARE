@@ -413,64 +413,151 @@ function initializeExtension() {
       event.preventDefault();
       event.stopPropagation();
 
-      let originalPrompt;
+      console.log("Encrypt button clicked"); // Confirm handler is being called
 
-      if (isGemini) {
-        originalPrompt = promptTextarea.textContent || "";
-      } else if (isGrok) {
-        originalPrompt = promptTextarea.value || "";
-      } else {
-        originalPrompt = promptTextarea.value || promptTextarea.textContent || "";
-      }
+      // Temporarily disable button to prevent double-clicks
+      encryptButton.disabled = true;
+      const originalButtonText = encryptButton.textContent;
+      encryptButton.textContent = "Processing...";
 
-      if (!originalPrompt) return;
-
-      const result = await processPrompt(originalPrompt);
-
-      if (result && Object.keys(result.originalData).length > 0) {
+      try {
+        // Always get a fresh reference to the textarea/input element
+        let promptElement;
         if (isGemini) {
-          // Replace the content for Gemini
-          promptTextarea.textContent = result.encryptedPrompt;
-
-          // Trigger input event for Gemini
-          const inputEvent = new InputEvent("input", {
-            bubbles: true,
-            cancelable: true,
-          });
-          promptTextarea.dispatchEvent(inputEvent);
+          promptElement = document.querySelector('.ql-editor[contenteditable="true"][data-placeholder="Ask Gemini"]');
         } else if (isGrok) {
-          // Replace textarea content for Grok
-          promptTextarea.value = result.encryptedPrompt;
-
-          // Trigger input event for Grok
-          const inputEvent = new InputEvent("input", {
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-          });
-          promptTextarea.dispatchEvent(inputEvent);
-
-          // Force resize of textarea if needed
-          if (promptTextarea.style.height) {
-            promptTextarea.style.height = 'auto';
-            promptTextarea.style.height = promptTextarea.scrollHeight + 'px';
-          }
+          promptElement = document.querySelector('.query-bar textarea[aria-label="Ask Grok anything"]');
         } else {
-          // Replace textarea content with encrypted version for ChatGPT
-          promptTextarea.value = result.encryptedPrompt;
-          promptTextarea.textContent = result.encryptedPrompt;
-
-          // Trigger input event to update ChatGPT's internal state
-          setTimeout(() => {
-            const inputEvent = new InputEvent("input", {
-              bubbles: true,
-              cancelable: true,
-              composed: true,
-              inputType: "insertText",
-            });
-            promptTextarea.dispatchEvent(inputEvent);
-          }, 10);
+          promptElement = document.getElementById("prompt-textarea");
         }
+
+        // If we couldn't find the element, use the original reference
+        if (!promptElement) {
+          console.log("Using original prompt textarea reference");
+          promptElement = promptTextarea;
+        } else {
+          console.log("Found fresh prompt textarea reference");
+        }
+
+        let originalPrompt;
+        if (isGemini) {
+          originalPrompt = promptElement.textContent || "";
+        } else if (isGrok) {
+          originalPrompt = promptElement.value || "";
+        } else {
+          originalPrompt = promptElement.value || promptElement.textContent || "";
+        }
+
+        console.log("Original prompt length:", originalPrompt.length);
+
+        if (!originalPrompt) {
+          console.log("No prompt text found!");
+          return;
+        }
+
+        const result = await processPrompt(originalPrompt);
+        console.log("API processing result:", result);
+
+        if (result && result.encryptedPrompt) {
+          console.log("Updating prompt with encrypted text");
+
+          if (isGemini) {
+            // Replace the content for Gemini
+            promptElement.textContent = result.encryptedPrompt;
+            promptElement.innerHTML = result.encryptedPrompt; // Add this line
+
+            // Create a more robust event trigger
+            setTimeout(() => {
+              const inputEvent = new InputEvent("input", {
+                bubbles: true,
+                cancelable: true,
+              });
+              promptElement.dispatchEvent(inputEvent);
+
+              // Force focus to ensure UI updates
+              promptElement.focus();
+
+              // Simulate a keypress to trigger Gemini's internal handlers
+              const keypressEvent = new KeyboardEvent('keypress', { bubbles: true });
+              promptElement.dispatchEvent(keypressEvent);
+            }, 10);
+          } else if (isGrok) {
+            // Replace textarea content for Grok
+            promptElement.value = result.encryptedPrompt;
+
+            // Create a more comprehensive event cascade
+            const events = ['input', 'change', 'keyup'];
+            events.forEach(eventType => {
+              const event = new Event(eventType, { bubbles: true });
+              promptElement.dispatchEvent(event);
+            });
+
+            // Force resize of textarea if needed
+            promptElement.style.height = 'auto';
+            promptElement.style.height = promptElement.scrollHeight + 'px';
+          } else {
+            // For ChatGPT - find the ProseMirror element which is the actual editable content
+            const proseMirror = document.querySelector('.ProseMirror#prompt-textarea');
+
+            if (proseMirror) {
+              // First, clear existing content properly
+              proseMirror.innerHTML = '';
+
+              // Create a new paragraph element with the encrypted text
+              const paragraph = document.createElement('p');
+              paragraph.textContent = result.encryptedPrompt;
+              proseMirror.appendChild(paragraph);
+
+              // Force multiple events with delays to ensure React registers the changes
+              setTimeout(() => {
+                // Simulate a user typing input - this is what React listens for
+                const inputEvent = new InputEvent('input', {
+                  bubbles: true,
+                  cancelable: true,
+                  composed: true,
+                });
+                proseMirror.dispatchEvent(inputEvent);
+
+                // Focus the element
+                proseMirror.focus();
+
+                // Set cursor position to the end
+                const selection = window.getSelection();
+                const range = document.createRange();
+                range.selectNodeContents(paragraph);
+                range.collapse(false);
+                selection.removeAllRanges();
+
+                selection.addRange(range);
+
+                // Dispatch additional events
+                ['change', 'keyup', 'blur', 'focus'].forEach(eventType => {
+                  proseMirror.dispatchEvent(new Event(eventType, { bubbles: true }));
+                });
+              }, 10);
+            } else {
+              // Fallback to the old method if ProseMirror isn't found
+              promptElement.value = result.encryptedPrompt;
+              const events = ['input', 'change', 'keyup'];
+              events.forEach(eventType => {
+                promptElement.dispatchEvent(new Event(eventType, { bubbles: true }));
+              });
+            }
+          }
+
+          console.log("Prompt updated successfully with:", result.encryptedPrompt.substring(0, 30) + "...");
+        } else {
+          console.log("No changes made to prompt");
+        }
+      } catch (error) {
+        console.error("Error in encrypt button handler:", error);
+      } finally {
+        // Re-enable the button and restore text
+        encryptButton.disabled = false;
+        encryptButton.textContent = originalButtonText;
+
+        // Update button visibility based on current content
+        updateButtonVisibility(promptTextarea, encryptButton);
       }
     });
   }
@@ -604,7 +691,7 @@ function initializeExtension() {
                 // Try to parse the response as JSON
                 try {
                   const jsonResponse = JSON.parse(responseContent);
-                  console.log("%c✅ API RESPONSE:", "color: white; background-color: #10a37f; font-size: 14px; padding: 5px;");
+                  console.log("%c API RESPONSE:", "color: white; background-color: #10a37f; font-size: 14px; padding: 5px;");
 
                   // Extract any text field that might contain the deanonymized content
                   let deanonymizedText = jsonResponse.deanonymized_text ||
@@ -612,7 +699,7 @@ function initializeExtension() {
                     jsonResponse.original_text;
 
                   if (deanonymizedText) {
-                    console.log("%c🔓 DEANONYMIZED TEXT:", "color: black; background-color: #ffeb3b; font-size: 14px; padding: 5px;");
+                    console.log("%c DEANONYMIZED TEXT:", "color: black; background-color: #ffeb3b; font-size: 14px; padding: 5px;");
                     console.log(deanonymizedText);
 
                     // UPDATE THE ACTUAL DOM ELEMENT WITH DEANONYMIZED TEXT
