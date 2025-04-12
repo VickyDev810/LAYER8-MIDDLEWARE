@@ -573,10 +573,10 @@ function initializeExtension() {
               // - Tokens with underscores: __EMAIL_6030cb23__, ___EMAIL_6030cb23___
               // - Malformed tokens: ___PHONE_c260e284___260e284___
               // - Added PERSON type
-              const tokenRegex = /_{0,3}(EMAIL|PHONE|SSN|CREDIT_CARD|IP_ADDRESS|PERSON)_([a-zA-Z0-9]+)_{0,3}/g;
+              const tokenRegex = /_{0,3}(EMAIL|PHONE|SSN|CREDIT_CARD|IP_ADDRESS|PERSON|ORGANIZATION|LOCATION|DATE)_([a-zA-Z0-9]+)_{0,3}/g;
               const text = responseText.textContent;
 
-              // Replace tokens with wrapped versions - ensure consistent format with double underscores
+              // Replace tokens with wrapped versions - ensure consistent format with triple underscores
               const modifiedText = text.replace(tokenRegex, (match, type, id) => {
                 // Extract just the type and ID, removing any surrounding underscores
                 return `___${type}_${id}___`;
@@ -620,22 +620,27 @@ function initializeExtension() {
 
                     // Add a visual indicator that the text has been deanonymized
                     responseText.style.opacity = '1';
-                    responseText.style.backgroundColor = 'rgba(16, 163, 127, 0.05)';
+                    responseText.style.backgroundColor = 'rgba(16, 163, 127, 0.08)';
+                    responseText.style.padding = '8px';
+                    responseText.style.borderRadius = '6px';
+                    responseText.style.transition = 'all 0.3s ease';
+                    responseText.style.boxShadow = '0 1px 4px rgba(0,0,0,0.1)';
 
                     // Create a small indicator badge
                     const badge = document.createElement('div');
                     badge.style.cssText = `
                       position: absolute;
-                      top: -5px;
-                      right: -5px;
+                      top: 8px;
+                      right: 8px;
                       background-color: #10a37f;
                       color: white;
-                      border-radius: 10px;
-                      padding: 2px 6px;
-                      font-size: 10px;
+                      border-radius: 4px;
+                      padding: 3px 8px;
+                      font-size: 11px;
                       font-weight: bold;
+                      z-index: 1;
                     `;
-                    badge.textContent = 'Deanonymized';
+                    badge.textContent = 'Decrypted';
 
                     // Make sure the response container has relative positioning
                     if (responseElement.style.position !== 'relative') {
