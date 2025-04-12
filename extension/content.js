@@ -12,7 +12,9 @@ chrome.storage.sync.get('enabled', function (data) {
   }
 });
 
-// START EXTESNION
+
+
+// START EXTESNION - INITIALIZATION
 
 function initializeExtension() {
   const API_URL = config.API_URL;
@@ -25,13 +27,10 @@ function initializeExtension() {
   console.log(`Detected AI platform: ${isGemini ? 'Gemini' : (isChatGPT ? 'ChatGPT' : (isGrok ? 'Grok' : 'Unknown'))
     }`);
 
-  /**
-   * Process a prompt by sending it to the API
-   * @param {string} prompt - The original user prompt
-   * @returns {Object} 
-   */
 
-  // PROCESS PROMPT AND API
+
+
+  // ANONYMIZE
   async function processPrompt(prompt) {
     try {
       // First, anonymize the prompt
@@ -50,18 +49,6 @@ function initializeExtension() {
 
       const anonymizedText = result.anonymized_text || prompt;
 
-      // Now deanonymize the result (for testing/verification)
-      // const deanonymizeResponse = await fetch(`${API_URL}/deanonymize`, {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify({ text: anonymizedText })
-      // });
-
-      // if (deanonymizeResponse.ok) {
-      //   const deanonymizeResult = await deanonymizeResponse.json();
-      //   console.log("Deanonymize verification:", deanonymizeResult);
-      // }
-
       return {
         encryptedPrompt: anonymizedText,
         originalData: result.sensitivity_report || {}
@@ -72,7 +59,10 @@ function initializeExtension() {
     }
   }
 
-  // Add this new function to handle deanonymizing responses
+  
+  
+  
+  //DEANONYMIZE
   async function deanonymizeResponse(responseText) {
     try {
       // Detect sensitive data tokens by pattern: DATATYPE_alphanumeric
@@ -155,7 +145,13 @@ function initializeExtension() {
     }
   }
 
-  // SET UP EXTENSION BUTTON
+
+
+
+
+
+  // WHICH SITE
+  
   function setupPromptListener() {
     if (isGemini) {
       setupGeminiInterface();
@@ -166,7 +162,9 @@ function initializeExtension() {
     }
   }
 
-  //custom button inside
+
+  // SET UP ENCRYPTION BUTTON
+  //CUSTOM BUTTON ADD
 
   // FOR CHATGPT UI
   function setupChatGPTInterface() {
@@ -190,6 +188,7 @@ function initializeExtension() {
     // We found the textarea, no need to keep observing
     observer.disconnect();
   }
+
 
   // FOR GEMINI UI
   function setupGeminiInterface() {
@@ -215,6 +214,7 @@ function initializeExtension() {
     observer.disconnect();
   }
 
+
   // FOR GROK UI
   function setupGrokInterface() {
     // Grok uses a textarea inside a query-bar class
@@ -237,6 +237,9 @@ function initializeExtension() {
 
     observer.disconnect();
   }
+
+
+
 
   // STYLING FOR ENCRYPT BUTTON
 
@@ -335,6 +338,8 @@ function initializeExtension() {
     return encryptButton;
   }
 
+
+
   // ATtachs the button to GPT interface
 
   function attachButtonToChatGPTInterface(promptTextarea, encryptButton) {
@@ -388,9 +393,14 @@ function initializeExtension() {
     }
   }
 
+
+
+
+
   // TEXT AREA EVENTLISTENERS
 
   function setupButtonBehavior(promptTextarea, encryptButton) {
+
     // Function to update button visibility based on textarea content
     const updateVisibility = () => updateButtonVisibility(promptTextarea, encryptButton);
 
@@ -408,7 +418,8 @@ function initializeExtension() {
       promptTextarea.addEventListener("focus", updateVisibility);
     }
 
-    // ENCRYPT BUTTON HANDLE SUBMIT AND
+
+    // ENCRYPT BUTTON HANDLE SUBMIT 
     encryptButton.addEventListener("click", async (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -498,52 +509,67 @@ function initializeExtension() {
           } else {
             // For ChatGPT - find the ProseMirror element which is the actual editable content
             const proseMirror = document.querySelector('.ProseMirror#prompt-textarea');
-
+        
             if (proseMirror) {
-              // First, clear existing content properly
-              proseMirror.innerHTML = '';
-
-              // Create a new paragraph element with the encrypted text
-              const paragraph = document.createElement('p');
-              paragraph.textContent = result.encryptedPrompt;
-              proseMirror.appendChild(paragraph);
-
-              // Force multiple events with delays to ensure React registers the changes
-              setTimeout(() => {
-                // Simulate a user typing input - this is what React listens for
-                const inputEvent = new InputEvent('input', {
-                  bubbles: true,
-                  cancelable: true,
-                  composed: true,
-                });
-                proseMirror.dispatchEvent(inputEvent);
-
-                // Focus the element
-                proseMirror.focus();
-
-                // Set cursor position to the end
-                const selection = window.getSelection();
-                const range = document.createRange();
-                range.selectNodeContents(paragraph);
-                range.collapse(false);
-                selection.removeAllRanges();
-
-                selection.addRange(range);
-
-                // Dispatch additional events
-                ['change', 'keyup', 'blur', 'focus'].forEach(eventType => {
-                  proseMirror.dispatchEvent(new Event(eventType, { bubbles: true }));
-                });
-              }, 10);
+                // First, clear existing content properly
+                proseMirror.innerHTML = '';
+        
+                // Create a new paragraph element with the encrypted text
+                const paragraph = document.createElement('p');
+                paragraph.textContent = result.encryptedPrompt;
+                proseMirror.appendChild(paragraph);
+        
+                // Force multiple events with delays to ensure React registers the changes
+                setTimeout(() => {
+                    try {
+                        // Simulate a user typing input
+                        const inputEvent = new InputEvent('input', {
+                            bubbles: true,
+                            cancelable: true,
+                            composed: true,
+                        });
+                        proseMirror.dispatchEvent(inputEvent);
+        
+                        // Focus the element
+                        proseMirror.focus();
+        
+                        // Set cursor position to the end safely
+                        try {
+                            const selection = window.getSelection();
+                            const range = document.createRange();
+                            
+                            // Make sure the paragraph is still in the document
+                            if (paragraph.isConnected) {
+                                // Place cursor at end of text
+                                const textNode = paragraph.firstChild;
+                                if (textNode) {
+                                    range.setStart(textNode, textNode.length);
+                                    range.setEnd(textNode, textNode.length);
+                                    selection.removeAllRanges();
+                                    selection.addRange(range);
+                                }
+                            }
+                        } catch (selectionError) {
+                            console.warn("Failed to set cursor position:", selectionError);
+                        }
+        
+                        // Dispatch additional events
+                        ['change', 'keyup', 'blur', 'focus'].forEach(eventType => {
+                            proseMirror.dispatchEvent(new Event(eventType, { bubbles: true }));
+                        });
+                    } catch (error) {
+                        console.warn("Error updating ChatGPT textarea:", error);
+                    }
+                }, 10);
             } else {
-              // Fallback to the old method if ProseMirror isn't found
-              promptElement.value = result.encryptedPrompt;
-              const events = ['input', 'change', 'keyup'];
-              events.forEach(eventType => {
-                promptElement.dispatchEvent(new Event(eventType, { bubbles: true }));
-              });
+                // Fallback to the old method if ProseMirror isn't found
+                promptElement.value = result.encryptedPrompt;
+                const events = ['input', 'change', 'keyup'];
+                events.forEach(eventType => {
+                    promptElement.dispatchEvent(new Event(eventType, { bubbles: true }));
+                });
             }
-          }
+        }
 
           console.log("Prompt updated successfully with:", result.encryptedPrompt.substring(0, 30) + "...");
         } else {
@@ -561,6 +587,8 @@ function initializeExtension() {
       }
     });
   }
+
+
 
   // ONLY SHOW BUTTON WHEN TEXT PRESENT IN THE TEXTAREA
 
@@ -586,8 +614,10 @@ function initializeExtension() {
     encryptButton.style.display = hasContent ? "block" : "none";
   }
 
+
   // Add a flag to control console logging frequency
   let shouldLogContainers = true;
+
 
   // Update the addButtonsToResponseActions function
   function addButtonsToResponseActions() {
@@ -629,6 +659,7 @@ function initializeExtension() {
           <path d="M2 17l10 5 10-5" stroke="currentColor" stroke-width="2"></path>
           <path d="M2 12l10 5 10-5" stroke="currentColor" stroke-width="2"></path>
         </svg>
+
       `;
 
       button.appendChild(buttonContent);
@@ -717,8 +748,8 @@ function initializeExtension() {
                     const badge = document.createElement('div');
                     badge.style.cssText = `
                       position: absolute;
-                      top: 8px;
-                      right: 8px;
+                      bottom: -25px;
+                      right: 0;
                       background-color: #10a37f;
                       color: white;
                       border-radius: 4px;
@@ -726,6 +757,7 @@ function initializeExtension() {
                       font-size: 11px;
                       font-weight: bold;
                       z-index: 1;
+                      margin-top: 8px;
                     `;
                     badge.textContent = 'Decrypted';
 
@@ -764,11 +796,12 @@ function initializeExtension() {
     });
   }
 
+
+
   // Run initially and periodically to catch new responses
   setTimeout(addButtonsToResponseActions, 1000);
 
-  //removed this--------
-  // setInterval(addButtonsToResponseActions, 2000);
+
 
   // Create a Mutation Observer to find the textarea when it loads
   const observer = new MutationObserver(() => {
@@ -776,6 +809,8 @@ function initializeExtension() {
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
+
+
 
   // Also add this to your existing response observer
   const responseObserver = new MutationObserver((mutations) => {
@@ -788,24 +823,6 @@ function initializeExtension() {
     if (shouldCheckForResponses) {
       // Add buttons to responses
       addButtonsToResponseActions();
-      /*
-            // Log all assistant responses to console automatically
-            const newResponses = document.querySelectorAll('[data-message-author-role="assistant"]');
-            newResponses.forEach(response => {
-              // Skip if we already logged this response (add a data attribute to track)
-              if (response.hasAttribute('data-layer8-logged')) return;
-      
-              const responseText = response.querySelector('.markdown')?.textContent;
-              if (responseText) {
-                console.log('--- NEW GPT RESPONSE ---');
-                console.log(responseText);
-                console.log('----------------------');
-      
-                // Mark as logged so we don't log it again
-                response.setAttribute('data-layer8-logged', 'true');
-              }
-            });
-            */
     }
   });
 
@@ -814,6 +831,8 @@ function initializeExtension() {
     childList: true,
     subtree: true
   });
+
+
 
   // Intercept fetch requests to anonymize data before sending to API
   const originalFetch = window.fetch;
