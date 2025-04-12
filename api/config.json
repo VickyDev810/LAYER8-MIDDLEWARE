@@ -1,0 +1,46 @@
+{
+  "llm": {
+    "provider": "gemini",
+    "model": "gemini-2.0-flash",
+    "temperature": 0.7,
+    "max_tokens": 1000
+  },
+  "provider_options": {
+    "openai": {
+      "model": "gpt-4o",
+      "temperature": 0.7,
+      "max_tokens": 1000
+    },
+    "anthropic": {
+      "model": "claude-3-sonnet-20240229",
+      "temperature": 0.7,
+      "max_tokens": 1000
+    },
+    "gemini": {
+      "model": "gemini-2.0-flash",
+      "temperature": 0.7,
+      "max_tokens": 1000
+    }
+  },
+  "anonymizer": {
+    "model_name": "en_core_web_lg",
+    "ner_confidence_threshold": 0.85,
+    "save_mappings": true,
+    "mappings_file": "anonymizer_state.json"
+  },
+  "domain_specific_terms": {
+    "project": [
+      
+      "Operation Phoenix", 
+      "NextGen Initiative"
+    ],
+    "product": [
+      "SecretProduct X9", 
+      "Enterprise Solution 2.0"
+    ],
+    "internal_code": [
+      "XZ-1234", 
+      "ACME-7890"
+    ]
+  }
+}

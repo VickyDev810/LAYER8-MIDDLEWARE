@@ -1,0 +1,22 @@
+# Core Dependencies
+fastapi
+uvicorn
+pydantic
+pydantic-settings  # For BaseSettings functionality
+python-dotenv
+python-jose  # For JWT tokens
+passlib  # For password hashing
+python-multipart # For form data parsing
+
+# LLM API Dependencies
+openai
+anthropic
+google-generativeai
+
+# NLP Dependencies
+spacy  # Core NLP library
+transformers # For more advanced NLP models
+scikit-learn  # For machine learning components
+
+# Optional: Download spaCy model with
+# python -m spacy download en_core_web_lg

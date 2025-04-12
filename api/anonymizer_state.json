@@ -1,0 +1,33 @@
+{
+  "anonymized_map": {
+    "___EMAIL_2c9d4824___": "veer@gmail.com",
+    "___EMAIL_56b00908___": "example@gmail.com",
+    "___ORGANIZATION_8c754a18___": "343343434323 Axis",
+    "___EMAIL_ec8c683c___": "example1@gmail.com",
+    "___ORGANIZATION_24577e5c___": "gemini api key",
+    "___EMAIL_8e46a2b7___": "x@gmail.com",
+    "___CREDIT_CARD_a90180dc___": "4234567818231245"
+  },
+  "custom_sensitive_terms": [
+    "Operation Phoenix",
+    "Enterprise Solution 2.0",
+    "NextGen Initiative",
+    "XZ-1234",
+    "SecretProduct X9",
+    "ACME-7890"
+  ],
+  "domain_specific_terms": {
+    "project": [
+      "Operation Phoenix",
+      "NextGen Initiative"
+    ],
+    "product": [
+      "Enterprise Solution 2.0",
+      "SecretProduct X9"
+    ],
+    "internal_code": [
+      "ACME-7890",
+      "XZ-1234"
+    ]
+  }
+}
