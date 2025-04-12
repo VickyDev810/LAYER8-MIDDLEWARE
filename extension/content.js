@@ -1,9 +1,8 @@
 console.log("AI Prompt Privacy Protector content script loaded.");
 
 // EXTENSION CHECK
-chrome.storage.sync.get("enabled", function (data) {
-  const isEnabled =
-    data.enabled !== undefined ? data.enabled : config.defaults.enabled;
+chrome.storage.sync.get('enabled', function (data) {
+  const isEnabled = data.enabled !== undefined ? data.enabled : config.defaults.enabled;
 
   if (isEnabled) {
     console.log("AI Prompt Privacy Protector is enabled and running.");
@@ -23,47 +22,136 @@ function initializeExtension() {
   const isChatGPT = window.location.hostname.includes(config.platforms.CHATGPT);
   const isGrok = window.location.hostname.includes(config.platforms.GROK);
 
-  console.log(
-    `Detected AI platform: ${
-      isGemini ? "Gemini" : isChatGPT ? "ChatGPT" : isGrok ? "Grok" : "Unknown"
-    }`
-  );
+  console.log(`Detected AI platform: ${isGemini ? 'Gemini' : (isChatGPT ? 'ChatGPT' : (isGrok ? 'Grok' : 'Unknown'))
+    }`);
 
   /**
    * Process a prompt by sending it to the API
    * @param {string} prompt - The original user prompt
-   * @returns {Object}
+   * @returns {Object} 
    */
 
   // PROCESS PROMPT AND API
-
   async function processPrompt(prompt) {
     try {
-      // URL encode the prompt text
-      const encodedPrompt = encodeURIComponent(prompt);
-      // Add the correct /anonymize/ path
-      const requestUrl = `${API_URL}/anonymize/${encodedPrompt}`;
-
-      console.log("Making API request to:", requestUrl);
-
-      const response = await fetch(requestUrl, {
-        method: "GET",
+      // First, anonymize the prompt
+      const response = await fetch(`${API_URL}/anonymize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: prompt })
       });
 
       if (!response.ok) {
-        throw new Error(`API returned status ${response.status}`);
+        throw new Error(`Anonymize API returned status ${response.status}`);
       }
 
       const result = await response.json();
-      console.log("API response:", result);
+      console.log("Anonymize API response:", result);
+
+      const anonymizedText = result.anonymized_text || prompt;
+
+      // Now deanonymize the result (for testing/verification)
+      // const deanonymizeResponse = await fetch(`${API_URL}/deanonymize`, {
+      //   method: "POST",
+      //   headers: { "Content-Type": "application/json" },
+      //   body: JSON.stringify({ text: anonymizedText })
+      // });
+
+      // if (deanonymizeResponse.ok) {
+      //   const deanonymizeResult = await deanonymizeResponse.json();
+      //   console.log("Deanonymize verification:", deanonymizeResult);
+      // }
 
       return {
-        encryptedPrompt: result.anonymized_text || prompt,
-        originalData: result.sensitivity_report || {},
+        encryptedPrompt: anonymizedText,
+        originalData: result.sensitivity_report || {}
       };
     } catch (error) {
       console.error(`Error calling API: ${error.message}`);
       return { encryptedPrompt: prompt, originalData: {} };
+    }
+  }
+
+  // Add this new function to handle deanonymizing responses
+  async function deanonymizeResponse(responseText) {
+    try {
+      // Detect sensitive data tokens by pattern: DATATYPE_alphanumeric
+      const tokenRegex = /\b(EMAIL|PHONE|SSN|CREDIT_CARD|IP_ADDRESS)_([a-zA-Z0-9]+)\b/g;
+
+      // Find tokens before processing
+      const foundTokens = responseText.match(tokenRegex) || [];
+      console.log("Found tokens:", foundTokens);
+
+      // If no tokens found, just return the original text
+      if (foundTokens.length === 0) {
+        console.log("%c⚠️ NO TOKENS FOUND TO DEANONYMIZE", "color: orange; font-weight: bold");
+        return { deanonymized_text: responseText };
+      }
+
+      // Wrap all detected tokens with double underscores
+      const processedText = responseText.replace(tokenRegex, '__$1_$2__');
+
+      console.log("%cCALLING DEANONYMIZE API...", "color: blue; font-weight: bold");
+      console.log("Using API URL:", API_URL);
+      console.log("Processed text with tokens wrapped:", processedText);
+
+      // Make the API call
+      const response = await fetch(`${API_URL}/deanonymize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: processedText })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Deanonymize API returned status ${response.status}`);
+      }
+
+      // Parse the response text first to debug
+      const responseTextContent = await response.text();
+      console.log("Raw API response text:", responseTextContent);
+
+      // Try to parse as JSON
+      let result;
+      try {
+        result = JSON.parse(responseTextContent);
+      } catch (jsonError) {
+        console.error("Failed to parse API response as JSON:", jsonError);
+        // If we can't parse JSON, use the response text directly
+        return { deanonymized_text: responseTextContent };
+      }
+
+      // Handle different response formats
+      let deanonymizedText = null;
+
+      if (result.deanonymized_text) {
+        deanonymizedText = result.deanonymized_text;
+      } else if (result.text) {
+        deanonymizedText = result.text;
+      } else if (typeof result === 'string') {
+        deanonymizedText = result;
+      } else {
+        // Try to find any likely text property
+        for (const key in result) {
+          if (typeof result[key] === 'string' && result[key].length > 20) {
+            deanonymizedText = result[key];
+            break;
+          }
+        }
+      }
+
+      // Show the result
+      if (deanonymizedText) {
+        console.log("%c🔓 DEANONYMIZED TEXT:", "color: white; background-color: #10a37f; font-size: 14px; padding: 5px; border-radius: 3px;");
+        console.log(deanonymizedText);
+        return { deanonymized_text: deanonymizedText, original_response: result };
+      } else {
+        console.log("%c COULDN'T EXTRACT DEANONYMIZED TEXT", "color: white; background-color: #e34c26; font-size: 14px; padding: 5px;");
+        console.log("API response structure:", result);
+        return { original_response: result };
+      }
+    } catch (error) {
+      console.error(`%c❌ ERROR:`, "color: red; font-weight: bold", error);
+      return { error: error.message };
     }
   }
 
@@ -77,6 +165,8 @@ function initializeExtension() {
       setupGrokInterface();
     }
   }
+
+  //custom button inside
 
   // FOR CHATGPT UI
   function setupChatGPTInterface() {
@@ -104,9 +194,7 @@ function initializeExtension() {
   // FOR GEMINI UI
   function setupGeminiInterface() {
     // Gemini uses a contentEditable div inside rich-textarea
-    const promptTextarea = document.querySelector(
-      '.ql-editor[contenteditable="true"][data-placeholder="Ask Gemini"]'
-    );
+    const promptTextarea = document.querySelector('.ql-editor[contenteditable="true"][data-placeholder="Ask Gemini"]');
     if (!promptTextarea) return;
 
     console.log("Gemini prompt textarea found");
@@ -130,9 +218,7 @@ function initializeExtension() {
   // FOR GROK UI
   function setupGrokInterface() {
     // Grok uses a textarea inside a query-bar class
-    const promptTextarea = document.querySelector(
-      '.query-bar textarea[aria-label="Ask Grok anything"]'
-    );
+    const promptTextarea = document.querySelector('.query-bar textarea[aria-label="Ask Grok anything"]');
     if (!promptTextarea) return;
 
     console.log("Grok prompt textarea found");
@@ -253,9 +339,8 @@ function initializeExtension() {
 
   function attachButtonToChatGPTInterface(promptTextarea, encryptButton) {
     // Look for the toolbar where other buttons are located
-    const toolbar =
-      document.querySelector(".flex.items-center.gap-2.overflow-x-auto") ||
-      document.querySelector(".flex.items-center");
+    const toolbar = document.querySelector('.flex.items-center.gap-2.overflow-x-auto') ||
+      document.querySelector('.flex.items-center');
 
     if (toolbar) {
       // Insert our button at the beginning of the toolbar
@@ -267,8 +352,9 @@ function initializeExtension() {
   // Attaches the button to the Gemini interface
 
   function attachButtonToGeminiInterface(promptTextarea, encryptButton) {
+
     // Alternative: add near the mic/send buttons
-    const actionsWrapper = document.querySelector(".trailing-actions-wrapper");
+    const actionsWrapper = document.querySelector('.trailing-actions-wrapper');
     if (actionsWrapper) {
       // Create a container similar to other Gemini buttons
       const buttonContainer = document.createElement("div");
@@ -286,9 +372,7 @@ function initializeExtension() {
 
   function attachButtonToGrokInterface(promptTextarea, encryptButton) {
     // Try to find the buttons container in Grok's UI
-    const buttonsContainer = promptTextarea
-      .closest(".query-bar")
-      ?.querySelector(".flex.gap-1\\.5.max-w-full");
+    const buttonsContainer = promptTextarea.closest('.query-bar')?.querySelector('.flex.gap-1\\.5.max-w-full');
 
     if (buttonsContainer) {
       // Insert our button at the beginning of the toolbar
@@ -297,9 +381,7 @@ function initializeExtension() {
     }
 
     // Find the DeepSearch button to place ours next to it
-    const deepSearchButton = document.querySelector(
-      'button[aria-label="DeepSearch"]'
-    );
+    const deepSearchButton = document.querySelector('button[aria-label="DeepSearch"]');
     if (deepSearchButton && deepSearchButton.parentNode) {
       deepSearchButton.parentNode.insertBefore(encryptButton, deepSearchButton);
       return;
@@ -310,14 +392,11 @@ function initializeExtension() {
 
   function setupButtonBehavior(promptTextarea, encryptButton) {
     // Function to update button visibility based on textarea content
-    const updateVisibility = () =>
-      updateButtonVisibility(promptTextarea, encryptButton);
+    const updateVisibility = () => updateButtonVisibility(promptTextarea, encryptButton);
 
     // Add event listeners for both typing and pasting
     promptTextarea.addEventListener("input", updateVisibility);
-    promptTextarea.addEventListener("paste", () =>
-      setTimeout(updateVisibility, 10)
-    );
+    promptTextarea.addEventListener("paste", () => setTimeout(updateVisibility, 10));
 
     // Platform-specific event handling
     if (isGemini) {
@@ -341,8 +420,7 @@ function initializeExtension() {
       } else if (isGrok) {
         originalPrompt = promptTextarea.value || "";
       } else {
-        originalPrompt =
-          promptTextarea.value || promptTextarea.textContent || "";
+        originalPrompt = promptTextarea.value || promptTextarea.textContent || "";
       }
 
       if (!originalPrompt) return;
@@ -374,8 +452,8 @@ function initializeExtension() {
 
           // Force resize of textarea if needed
           if (promptTextarea.style.height) {
-            promptTextarea.style.height = "auto";
-            promptTextarea.style.height = promptTextarea.scrollHeight + "px";
+            promptTextarea.style.height = 'auto';
+            promptTextarea.style.height = promptTextarea.scrollHeight + 'px';
           }
         } else {
           // Replace textarea content with encrypted version for ChatGPT
@@ -406,10 +484,8 @@ function initializeExtension() {
       // For Gemini, check the textContent
       hasContent = (promptTextarea.textContent || "").trim().length > 0;
       // Check if the div only contains a <br> but no actual text
-      if (
-        (hasContent && promptTextarea.innerHTML.trim() === "<br>") ||
-        promptTextarea.innerHTML.trim().includes("data-placeholder")
-      ) {
+      if (hasContent && promptTextarea.innerHTML.trim() === '<br>' ||
+        promptTextarea.innerHTML.trim().includes('data-placeholder')) {
         hasContent = false;
       }
     } else if (isGrok) {
@@ -417,13 +493,190 @@ function initializeExtension() {
       hasContent = (promptTextarea.value || "").trim().length > 0;
     } else {
       // For ChatGPT check both value and textContent
-      hasContent =
-        (promptTextarea.value || promptTextarea.textContent || "").trim()
-          .length > 0;
+      hasContent = (promptTextarea.value || promptTextarea.textContent || "").trim().length > 0;
     }
 
     encryptButton.style.display = hasContent ? "block" : "none";
   }
+
+  // Add a flag to control console logging frequency
+  let shouldLogContainers = true;
+
+  // Update the addButtonsToResponseActions function
+  function addButtonsToResponseActions() {
+    if (!isChatGPT) return;
+
+    // Use a more specific selector matching the HTML structure you shared
+    const actionContainers = document.querySelectorAll('.flex.justify-start > div');
+
+    // Only log occasionally
+    if (shouldLogContainers) {
+      console.log(`Found ${actionContainers.length} action containers`);
+      shouldLogContainers = false;
+      // Reset the flag after 5 seconds
+      setTimeout(() => {
+        shouldLogContainers = true;
+      }, 5000);
+    }
+
+    actionContainers.forEach(container => {
+      // Skip if already added
+      if (container.querySelector('.layer8-action-btn')) return;
+
+      // Create button wrapper span like the other buttons
+      const buttonSpan = document.createElement('span');
+      buttonSpan.className = '';
+      buttonSpan.setAttribute('data-state', 'closed');
+
+      // Create the actual button
+      const button = document.createElement('button');
+      button.className = 'text-token-text-secondary hover:bg-token-main-surface-secondary rounded-lg layer8-action-btn';
+      button.setAttribute('aria-label', 'Process with Layer8');
+
+      // Add the icon span
+      const buttonContent = document.createElement('span');
+      buttonContent.className = 'touch:w-[38px] flex h-[30px] w-[30px] items-center justify-center';
+      buttonContent.innerHTML = `
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="icon-md-heavy">
+          <path d="M12 2L2 7l10 5 10-5-10-5z" fill="currentColor"></path>
+          <path d="M2 17l10 5 10-5" stroke="currentColor" stroke-width="2"></path>
+          <path d="M2 12l10 5 10-5" stroke="currentColor" stroke-width="2"></path>
+        </svg>
+      `;
+
+      button.appendChild(buttonContent);
+      buttonSpan.appendChild(button);
+
+      // Insert before the model selector (last button)
+      container.appendChild(buttonSpan);
+
+      // Only log when actually adding a button
+      console.log('Added Layer8 button to response actions');
+
+      button.addEventListener('click', async () => {
+        try {
+          const responseElement = container.closest('[data-message-author-role="assistant"]') ||
+            container.closest('.agent-turn');
+
+          if (responseElement) {
+            const responseText = responseElement.querySelector('.markdown');
+
+            if (responseText && responseText.textContent) {
+              console.log('Processing response with Layer8...');
+
+              // Show visual feedback that we're processing
+              const originalTextContent = responseText.textContent;
+              responseText.style.opacity = '0.6';
+
+              // Enhanced regex to detect all token patterns including:
+              // - Regular tokens: EMAIL_6030cb23
+              // - Tokens with underscores: __EMAIL_6030cb23__, ___EMAIL_6030cb23___
+              // - Malformed tokens: ___PHONE_c260e284___260e284___
+              // - Added PERSON type
+              const tokenRegex = /_{0,3}(EMAIL|PHONE|SSN|CREDIT_CARD|IP_ADDRESS|PERSON)_([a-zA-Z0-9]+)_{0,3}/g;
+              const text = responseText.textContent;
+
+              // Replace tokens with wrapped versions - ensure consistent format with double underscores
+              const modifiedText = text.replace(tokenRegex, (match, type, id) => {
+                // Extract just the type and ID, removing any surrounding underscores
+                return `___${type}_${id}___`;
+              });
+
+              console.log("Sending to API:", modifiedText.substring(0, 50) + "...");
+
+
+              try {
+                // Always use POST method since GET returns 405
+                console.log("Using POST method for API call");
+                const response = await fetch(`${API_URL}/deanonymize`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ text: modifiedText })
+                });
+
+                if (!response.ok) {
+                  throw new Error(`Deanonymize API returned status ${response.status}`);
+                }
+
+                const responseContent = await response.text();
+                console.log("Raw API response:", responseContent);
+
+                // Try to parse the response as JSON
+                try {
+                  const jsonResponse = JSON.parse(responseContent);
+                  console.log("%c✅ API RESPONSE:", "color: white; background-color: #10a37f; font-size: 14px; padding: 5px;");
+
+                  // Extract any text field that might contain the deanonymized content
+                  let deanonymizedText = jsonResponse.deanonymized_text ||
+                    jsonResponse.text ||
+                    jsonResponse.original_text;
+
+                  if (deanonymizedText) {
+                    console.log("%c🔓 DEANONYMIZED TEXT:", "color: black; background-color: #ffeb3b; font-size: 14px; padding: 5px;");
+                    console.log(deanonymizedText);
+
+                    // UPDATE THE ACTUAL DOM ELEMENT WITH DEANONYMIZED TEXT
+                    responseText.innerHTML = deanonymizedText;
+
+                    // Add a visual indicator that the text has been deanonymized
+                    responseText.style.opacity = '1';
+                    responseText.style.backgroundColor = 'rgba(16, 163, 127, 0.05)';
+
+                    // Create a small indicator badge
+                    const badge = document.createElement('div');
+                    badge.style.cssText = `
+                      position: absolute;
+                      top: -5px;
+                      right: -5px;
+                      background-color: #10a37f;
+                      color: white;
+                      border-radius: 10px;
+                      padding: 2px 6px;
+                      font-size: 10px;
+                      font-weight: bold;
+                    `;
+                    badge.textContent = 'Deanonymized';
+
+                    // Make sure the response container has relative positioning
+                    if (responseElement.style.position !== 'relative') {
+                      responseElement.style.position = 'relative';
+                    }
+
+                    responseElement.appendChild(badge);
+                  } else {
+                    // Just log the whole response if we can't find a specific field
+                    console.log(jsonResponse);
+                    // Restore original appearance
+                    responseText.style.opacity = '1';
+                  }
+                } catch (jsonError) {
+                  // If not JSON, display the raw text
+                  console.log("%c✅ API RESPONSE (TEXT):", "color: white; background-color: #10a37f; font-size: 14px; padding: 5px;");
+                  console.log(responseContent);
+                  // Try to use the raw text as response
+                  responseText.innerHTML = responseContent;
+                  responseText.style.opacity = '1';
+                }
+              } catch (apiError) {
+                console.error('Error during API call:', apiError);
+                // Restore original appearance and text
+                responseText.style.opacity = '1';
+                responseText.textContent = originalTextContent;
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Unexpected error in button click handler:', error);
+        }
+      });
+    });
+  }
+
+  // Run initially and periodically to catch new responses
+  setTimeout(addButtonsToResponseActions, 1000);
+
+  //removed this--------
+  // setInterval(addButtonsToResponseActions, 2000);
 
   // Create a Mutation Observer to find the textarea when it loads
   const observer = new MutationObserver(() => {
@@ -432,6 +685,44 @@ function initializeExtension() {
 
   observer.observe(document.body, { childList: true, subtree: true });
 
+  // Also add this to your existing response observer
+  const responseObserver = new MutationObserver((mutations) => {
+    // Check if any new responses were added
+    const shouldCheckForResponses = mutations.some(mutation =>
+      mutation.addedNodes.length > 0 ||
+      mutation.type === 'attributes' && mutation.target.classList.contains('agent-turn')
+    );
+
+    if (shouldCheckForResponses) {
+      // Add buttons to responses
+      addButtonsToResponseActions();
+      /*
+            // Log all assistant responses to console automatically
+            const newResponses = document.querySelectorAll('[data-message-author-role="assistant"]');
+            newResponses.forEach(response => {
+              // Skip if we already logged this response (add a data attribute to track)
+              if (response.hasAttribute('data-layer8-logged')) return;
+      
+              const responseText = response.querySelector('.markdown')?.textContent;
+              if (responseText) {
+                console.log('--- NEW GPT RESPONSE ---');
+                console.log(responseText);
+                console.log('----------------------');
+      
+                // Mark as logged so we don't log it again
+                response.setAttribute('data-layer8-logged', 'true');
+              }
+            });
+            */
+    }
+  });
+
+  responseObserver.disconnect();
+  responseObserver.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+
   // Intercept fetch requests to anonymize data before sending to API
   const originalFetch = window.fetch;
   window.fetch = async (...args) => {
@@ -439,19 +730,13 @@ function initializeExtension() {
     const options = args[1] || {};
 
     // Process ChatGPT API requests
-    if (
-      isChatGPT &&
-      url.includes("chatgpt.com/backend-api/conversation") &&
-      typeof options.body === "string"
-    ) {
+    if (isChatGPT && url.includes("chatgpt.com/backend-api/conversation") && typeof options.body === "string") {
       try {
         const parsedBody = JSON.parse(options.body);
 
         // Handle direct prompts
         if (parsedBody && typeof parsedBody.prompt === "string") {
-          const { encryptedPrompt, originalData } = await processPrompt(
-            parsedBody.prompt
-          );
+          const { encryptedPrompt, originalData } = await processPrompt(parsedBody.prompt);
           if (Object.keys(originalData).length > 0) {
             parsedBody.prompt = encryptedPrompt;
             options.body = JSON.stringify(parsedBody);
@@ -461,9 +746,7 @@ function initializeExtension() {
         else if (parsedBody && Array.isArray(parsedBody.messages)) {
           for (const message of parsedBody.messages) {
             if (message && typeof message.content === "string") {
-              const { encryptedPrompt, originalData } = await processPrompt(
-                message.content
-              );
+              const { encryptedPrompt, originalData } = await processPrompt(message.content);
               if (Object.keys(originalData).length > 0) {
                 message.content = encryptedPrompt;
                 options.body = JSON.stringify(parsedBody);
@@ -477,19 +760,14 @@ function initializeExtension() {
       }
     }
 
-    // Process Gemini API requests
-    if (
-      isGemini &&
-      (url.includes("generativelanguage.googleapis.com") ||
-        url.includes("gemini.google.com/api"))
-    ) {
+    // Process Gemini API requests 
+    if (isGemini && (url.includes("generativelanguage.googleapis.com") ||
+      url.includes("gemini.google.com/api"))) {
       try {
         // Only process if it's a POST request with body
         if (options.method === "POST" && options.body) {
-          const bodyContent =
-            typeof options.body === "string"
-              ? JSON.parse(options.body)
-              : options.body;
+          const bodyContent = typeof options.body === "string" ?
+            JSON.parse(options.body) : options.body;
 
           // Check for common Gemini API structures
           if (bodyContent.contents) {
@@ -498,8 +776,7 @@ function initializeExtension() {
               if (content.parts) {
                 for (const part of content.parts) {
                   if (part.text) {
-                    const { encryptedPrompt, originalData } =
-                      await processPrompt(part.text);
+                    const { encryptedPrompt, originalData } = await processPrompt(part.text);
                     if (Object.keys(originalData).length > 0) {
                       part.text = encryptedPrompt;
                       options.body = JSON.stringify(bodyContent);
@@ -510,9 +787,7 @@ function initializeExtension() {
             }
           } else if (bodyContent.prompt && bodyContent.prompt.text) {
             // Handle direct text prompts
-            const { encryptedPrompt, originalData } = await processPrompt(
-              bodyContent.prompt.text
-            );
+            const { encryptedPrompt, originalData } = await processPrompt(bodyContent.prompt.text);
             if (Object.keys(originalData).length > 0) {
               bodyContent.prompt.text = encryptedPrompt;
               options.body = JSON.stringify(bodyContent);
@@ -525,39 +800,27 @@ function initializeExtension() {
     }
 
     // Process Grok API requests
-    if (
-      isGrok &&
-      (url.includes("api.x.ai") ||
-        url.includes("grok.x.ai/api") ||
-        url.includes("grok.com/api"))
-    ) {
+    if (isGrok && (url.includes("api.x.ai") ||
+      url.includes("grok.x.ai/api") ||
+      url.includes("grok.com/api"))) {
       try {
         // Only process if it's a POST request with body
         if (options.method === "POST" && options.body) {
-          const bodyContent =
-            typeof options.body === "string"
-              ? JSON.parse(options.body)
-              : options.body;
+          const bodyContent = typeof options.body === "string" ?
+            JSON.parse(options.body) : options.body;
 
           // Check for common Grok API structures (may need adjusting based on actual API)
           if (bodyContent.message) {
-            const { encryptedPrompt, originalData } = await processPrompt(
-              bodyContent.message
-            );
+            const { encryptedPrompt, originalData } = await processPrompt(bodyContent.message);
             if (Object.keys(originalData).length > 0) {
               bodyContent.message = encryptedPrompt;
               options.body = JSON.stringify(bodyContent);
             }
-          } else if (
-            bodyContent.messages &&
-            Array.isArray(bodyContent.messages)
-          ) {
+          } else if (bodyContent.messages && Array.isArray(bodyContent.messages)) {
             // Handle message array structure
             for (const message of bodyContent.messages) {
               if (message && typeof message.content === "string") {
-                const { encryptedPrompt, originalData } = await processPrompt(
-                  message.content
-                );
+                const { encryptedPrompt, originalData } = await processPrompt(message.content);
                 if (Object.keys(originalData).length > 0) {
                   message.content = encryptedPrompt;
                   options.body = JSON.stringify(bodyContent);
@@ -567,9 +830,7 @@ function initializeExtension() {
             }
           } else if (bodyContent.prompt) {
             // Handle prompt property
-            const { encryptedPrompt, originalData } = await processPrompt(
-              bodyContent.prompt
-            );
+            const { encryptedPrompt, originalData } = await processPrompt(bodyContent.prompt);
             if (Object.keys(originalData).length > 0) {
               bodyContent.prompt = encryptedPrompt;
               options.body = JSON.stringify(bodyContent);
@@ -580,7 +841,6 @@ function initializeExtension() {
         console.error("Error processing Grok fetch request:", e);
       }
     }
-
     return originalFetch.apply(this, args);
   };
 }
