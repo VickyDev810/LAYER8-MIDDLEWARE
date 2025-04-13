@@ -46,7 +46,7 @@
   <div class="max-w-6xl mx-auto">
     <div class="text-center mb-12">
       <h1 class="text-8xl font-bold gradient-text mb-4">Browser Extension</h1>
-      <p class="text-2xl text-purple-200 max-w-2xl mx-auto">Enhance your development workflow</p>
+      <p class="text-2xl text-purple-200 max-w-2xl mx-auto">Lightweight, Fast, User Friendly Privacy</p>
     </div>
 
     <div class="flex justify-center gap-6 mb-8">
