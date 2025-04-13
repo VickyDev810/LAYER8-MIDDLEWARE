@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply min-h-screen bg-dark text-slate-200 relative;
+    font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+    background-attachment: fixed;
+  }
+  
+  a {
+    @apply font-medium text-neon-blue hover:text-purple-300;
+    text-decoration: inherit;
+  }
+
+  ::selection {
+    @apply bg-neon-purple bg-opacity-50 text-white;
+  }
+}
+
+.mouse-light {
+  @apply fixed pointer-events-none opacity-40 rounded-full;
+  width: 800px;
+  height: 800px;
+  background: radial-gradient(circle, rgba(87, 13, 248, 0.6) 0%, rgba(110, 30, 255, 0.2) 30%, rgba(18, 8, 47, 0) 70%);
+  transform: translate(-50%, -50%);
+  z-index: -1;
+  will-change: transform, left, top, background;
+}
+
+.blur-panel {
+  @apply backdrop-blur-md bg-purple-950 bg-opacity-20 border border-purple-700 border-opacity-30;
+}
+
+.card-blur {
+  @apply backdrop-blur-md bg-purple-950 bg-opacity-30 border border-solid border-white border-opacity-20 rounded-xl shadow-lg;
+}
+
+.gradient-text {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-neon-pink via-neon-purple to-neon-blue;
+}
+
+@layer components {
+  .animate-pulse {
+    animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.3;
+    }
+  }
+  
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  
+  .animate-spin {
+    animation: spin 1s linear infinite;
+  }
+
+  .glow {
+    text-shadow: 0 0 5px currentColor, 0 0 10px currentColor;
+  }
+
+  .navbar-blur {
+    @apply backdrop-blur-md bg-purple-950 bg-opacity-20;
+  }
+}
+
