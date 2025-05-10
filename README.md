@@ -1,4 +1,4 @@
-# Layer8 — AI Privacy Middleware 🛡️🤖
+# Layer8 — VPN for AI 🛡️🤖
 
 > **AI privacy, as easy as a VPN.**  
 > Lock down your AI interactions using hardware-backed enclaves. No logs. No leaks. No compromises.
